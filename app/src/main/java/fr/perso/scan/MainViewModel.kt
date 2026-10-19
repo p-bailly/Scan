@@ -75,7 +75,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             val loaded = withContext(Dispatchers.IO) { store.loadAll() }
-            _documents.value = loaded
+            // Un document a pu être créé pendant le chargement (photos partagées au démarrage).
+            _documents.update { created ->
+                (loaded.filterNot { old -> created.any { it.id == old.id } } + created).sortedByDescending { it.updatedAt }
+            }
             loaded.forEach { renderMissing(it) }
         }
     }
@@ -133,7 +136,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             if (newPages.size < uris.size) message("${uris.size - newPages.size} image(s) illisible(s) ignorée(s)")
             val now = System.currentTimeMillis()
-            val document = existing?.copy(updatedAt = now, pages = existing.pages + newPages)
+            // Version à jour du document : il a pu être modifié pendant l'import.
+            val current = existing?.let { document(it.id) }
+            val document = current?.copy(updatedAt = now, pages = current.pages + newPages)
                 ?: ScanDocument(documentId, defaultName(now), now, now, newPages)
             commit(document)
             _screen.value = Screen.Document(document.id)
