@@ -9,6 +9,8 @@ import fr.perso.scan.data.DocumentStore
 import fr.perso.scan.data.ScanDocument
 import fr.perso.scan.data.ScanMode
 import fr.perso.scan.data.ScanPage
+import fr.perso.scan.imaging.BilevelPng
+import fr.perso.scan.imaging.JpegInfo
 import fr.perso.scan.pdf.PageFormat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -47,9 +49,12 @@ class PageRendererTest {
         writePhoto(store, "doc", "p1")
         writePhoto(store, "doc", "p2")
 
-        // Noir et blanc tourné d'un quart de tour : portrait, agrandi à 3300 px, noir et blanc purs.
+        // Noir et blanc tourné d'un quart de tour : portrait, agrandi à 3300 px, PNG 1 bit lisible par Android.
         val bw = ScanPage("p1", ScanMode.BLACK_WHITE, rotation = 90)
         renderer.render("doc", bw)
+        val png = BilevelPng.read(store.render("doc", bw).readBytes())
+        assertEquals(2475, png?.width)
+        assertTrue("PNG 1 bit léger : ${store.render("doc", bw).length()}", store.render("doc", bw).length() < 100_000)
         val bwBitmap = BitmapFactory.decodeFile(store.render("doc", bw).path)
         assertEquals(2475, bwBitmap.width)
         assertEquals(3300, bwBitmap.height)
@@ -72,10 +77,34 @@ class PageRendererTest {
         val pdf = out.toByteArray().toString(Charsets.ISO_8859_1)
         assertTrue(pdf.startsWith("%PDF-1.4"))
         assertEquals(2, Regex("/Type /Page ").findAll(pdf).count())
-        assertTrue(pdf.contains("/BitsPerComponent 1 /Filter /FlateDecode"))
+        assertTrue(pdf.contains("/BitsPerComponent 1 /Filter /FlateDecode /DecodeParms"))
         assertTrue(pdf.contains("/Filter /DCTDecode"))
         // Page noir et blanc en 1 bit : quelques Ko, pas des Mo.
         assertTrue("taille : ${out.size()}", out.size() < 400_000)
+    }
+
+    @Test
+    fun `original droit copie sans recompression, original tourne reencode`() {
+        val store = DocumentStore(folder.root)
+        val renderer = PageRenderer(store)
+        writePhoto(store, "doc", "p1")
+        val original = store.original("doc", "p1").readBytes()
+
+        val straight = ScanPage("p1", ScanMode.ORIGINAL)
+        renderer.render("doc", straight)
+        assertTrue(original.contentEquals(store.render("doc", straight).readBytes()))
+        assertTrue(store.thumbnail("doc", straight).exists())
+
+        val turned = ScanPage("p1", ScanMode.ORIGINAL, rotation = 270, version = 1)
+        renderer.render("doc", turned)
+        assertEquals(JpegInfo(900, 1200, 3), JpegInfo.read(store.render("doc", turned).readBytes()))
+
+        // Dans le PDF, le JPEG d'origine est inséré octet pour octet.
+        val out = ByteArrayOutputStream()
+        renderer.writePdf("doc", "Test", listOf(straight), PageFormat.A4, out)
+        val pdf = out.toByteArray()
+        assertTrue(pdf.size < original.size + 2_000)
+        assertTrue(String(pdf, Charsets.ISO_8859_1).contains(String(original, Charsets.ISO_8859_1)))
     }
 
     @Test

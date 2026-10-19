@@ -11,7 +11,8 @@ import java.util.zip.DeflaterOutputStream
 /**
  * Écrit un PDF dont chaque page est une image, comme un PDF de scanner :
  * - pages couleur : le JPEG est inséré tel quel (DCTDecode), sans recompression ;
- * - pages noir et blanc : 1 bit par pixel compressé (FlateDecode), net et très léger.
+ * - pages noir et blanc : 1 bit par pixel compressé (FlateDecode), net et très léger ; un PNG 1 bit
+ *   est inséré tel quel, sans décodage.
  *
  * Les pages sont écrites au fur et à mesure : une seule image en mémoire à la fois.
  * Pur Kotlin (sans Android), testé sur la JVM.
@@ -22,6 +23,11 @@ class PdfWriter(output: OutputStream, private val title: String) {
     sealed class Image(val width: Int, val height: Int) {
         /** Fichier JPEG complet (RVB ou niveaux de gris selon [components]). */
         class Jpeg(val bytes: ByteArray, width: Int, height: Int, val components: Int = 3) : Image(width, height)
+
+        /**
+         * Noir et blanc déjà compressé : données zlib d'un PNG 1 bit (voir BilevelPng), insérées telles quelles.
+         */
+        class PngBilevel(val zlib: ByteArray, width: Int, height: Int) : Image(width, height)
 
         /**
          * Noir et blanc : [readRow] remplit les pixels ARGB de la ligne demandée ;
@@ -55,6 +61,14 @@ class PdfWriter(output: OutputStream, private val title: String) {
                     "/ColorSpace ${if (image.components == 1) "/DeviceGray" else "/DeviceRGB"} " +
                     "/BitsPerComponent 8 /Filter /DCTDecode",
                 image.bytes,
+            )
+            // Lignes PNG (un octet de filtre en tête de chaque ligne) : prédicteur PNG du PDF.
+            is Image.PngBilevel -> writeStream(
+                imageObj,
+                "/Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} " +
+                    "/ColorSpace /DeviceGray /BitsPerComponent 1 /Filter /FlateDecode " +
+                    "/DecodeParms << /Predictor 15 /Colors 1 /BitsPerComponent 1 /Columns ${image.width} >>",
+                image.zlib,
             )
             is Image.BlackAndWhite -> writeStream(
                 imageObj,

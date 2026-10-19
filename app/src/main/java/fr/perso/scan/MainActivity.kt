@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.core.content.IntentCompat
+import fr.perso.scan.scanner.DocumentScanner
 import fr.perso.scan.ui.ScanApp
 import fr.perso.scan.ui.ScanTheme
 
@@ -17,7 +18,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (savedInstanceState == null) importShared(intent)
+        if (savedInstanceState == null) {
+            DocumentScanner.preload(applicationContext)
+            importShared(intent)
+        }
         setContent {
             ScanTheme {
                 ScanApp(viewModel)

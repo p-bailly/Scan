@@ -30,23 +30,36 @@ class EnhancerTest {
 
     @Test
     fun `noir et blanc - papier blanc partout et encre noire, malgre l'ombre`() {
-        val pixels = photo()
-        Enhancer.blackAndWhite(pixels, width, height)
+        val result = Enhancer.blackAndWhite(photo(), width, height)
 
         var wrong = 0
         for (y in 0 until height) for (x in 0 until width) {
-            val expected = if (isInk(x, y)) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
-            if (pixels[y * width + x] != expected) wrong++
+            if (result.isBlack(x, y) != isInk(x, y)) wrong++
+        }
+        assertEquals("pixels mal classés", 0, wrong)
+    }
+
+    @Test
+    fun `noir et blanc agrandi - les traits restent a leur place, deux fois plus grands`() {
+        val result = Enhancer.blackAndWhite(photo(), width, height, width * 2, height * 2)
+        assertEquals(width * 2, result.width)
+        assertEquals(height * 2, result.height)
+
+        // Loin des bords des traits (l'interpolation y décide au demi-pixel près), tout est bien classé.
+        var wrong = 0
+        for (y in 0 until height * 2) for (x in 0 until width * 2) {
+            val inside = isInk(x / 2, y / 2)
+            val border = (-1..1).any { dy -> (-1..1).any { dx -> isInk((x + dx) / 2, (y + dy) / 2) != inside } }
+            if (!border && result.isBlack(x, y) != inside) wrong++
         }
         assertEquals("pixels mal classés", 0, wrong)
     }
 
     @Test
     fun `noir et blanc - un stylo bleu reste lisible`() {
-        val pixels = photo(inkColor = 0x2850C8)
-        Enhancer.blackAndWhite(pixels, width, height)
+        val result = Enhancer.blackAndWhite(photo(inkColor = 0x2850C8), width, height)
         for (y in 0 until height) for (x in 0 until width) {
-            if (isInk(x, y)) assertEquals(0xFF000000.toInt(), pixels[y * width + x])
+            if (isInk(x, y)) assertTrue(result.isBlack(x, y))
         }
     }
 
@@ -57,8 +70,25 @@ class EnhancerTest {
             val v = 200 + random.nextInt(30) - 15
             (0xFF shl 24) or (v shl 16) or (v shl 8) or v
         }
-        Enhancer.blackAndWhite(pixels, width, height)
-        assertTrue(pixels.all { it == 0xFFFFFFFF.toInt() })
+        val result = Enhancer.blackAndWhite(pixels, width, height)
+        assertTrue(result.data.all { it == 0xFF.toByte() || it.toInt() and 0xFF == 0xFF })
+    }
+
+    @Test
+    fun `noir et blanc - taches de bruit effacees, points de ponctuation gardes`() {
+        val pixels = IntArray(width * height) { 0xFFDCDCDC.toInt() }
+        fun dot(x0: Int, y0: Int, size: Int) {
+            for (y in y0 until y0 + size) for (x in x0 until x0 + size) pixels[y * width + x] = 0xFF282828.toInt()
+        }
+        dot(100, 100, 1) // pixel isolé
+        dot(200, 100, 2) // 2 × 2 = 4 pixels : au-dessus de la limite (2 pixels sans agrandissement), gardée
+        dot(300, 300, 1)
+        dot(400, 400, 4) // point de ponctuation
+        val result = Enhancer.blackAndWhite(pixels, width, height)
+        assertTrue(!result.isBlack(100, 100))
+        assertTrue(!result.isBlack(300, 300))
+        assertTrue(result.isBlack(401, 401))
+        assertTrue(result.isBlack(200, 100))
     }
 
     @Test
@@ -70,9 +100,21 @@ class EnhancerTest {
             val v = if (x in 100..499 && y in 200..599) 40 else 220
             (0xFF shl 24) or (v shl 16) or (v shl 8) or v
         }
-        Enhancer.blackAndWhite(pixels, width, height)
-        assertEquals(0xFF000000.toInt(), pixels[400 * width + 300])
-        assertEquals(0xFFFFFFFF.toInt(), pixels[50 * width + 50])
+        val result = Enhancer.blackAndWhite(pixels, width, height)
+        assertTrue(result.isBlack(300, 400))
+        assertTrue(!result.isBlack(50, 50))
+    }
+
+    @Test
+    fun `miniature noir et blanc en niveaux de gris`() {
+        val image = Bilevel(8, 4)
+        // Moitié gauche noire (bits à 0), moitié droite blanche.
+        for (y in 0 until 4) image.data[y] = 0x0F
+        val thumb = image.downscale(2)
+        assertEquals(2, thumb.width)
+        assertEquals(1, thumb.height)
+        assertEquals(0xFF000000.toInt(), thumb.pixels[0])
+        assertEquals(0xFFFFFFFF.toInt(), thumb.pixels[1])
     }
 
     @Test

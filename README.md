@@ -29,7 +29,11 @@ retélécharger : il s'installe par-dessus l'ancien, documents conservés.
   enregistré en 1 bit dans le PDF : très net et très léger (quelques dizaines de Ko par page).
 - **Couleur** : les couleurs sont gardées, le papier est blanchi (fini le jaune ou le gris des photos),
   ombres effacées, encres ravivées.
-- **Original** : la photo recadrée, sans retouche.
+- **Original** : la photo recadrée, sans retouche ni recompression.
+
+Le traitement est réparti sur tous les cœurs du téléphone, le noir et blanc est calculé directement en
+1 bit, et le PDF est assemblé sans rien décoder ni recompresser : quelques fractions de seconde par page.
+Le module du scanner Google est préchargé à l'ouverture de l'appli, le premier scan démarre sans attendre.
 
 **Documents**
 - Liste des documents avec miniature, date et nombre de pages, recherche (sans tenir compte des accents).
@@ -50,10 +54,11 @@ téléphones) ; sans eux, l'import depuis la galerie reste disponible.
 - `core/` — sans Android, testé sur la JVM :
   - `imaging/Enhancer.kt` : estime la couleur du papier en tout point (moyenne par blocs, maximum local pour
     effacer l'encre, flou), puis divise chaque pixel par cette valeur. Le papier devient blanc partout et
-    l'encre garde son contraste, quelle que soit la lumière. Le noir et blanc seuille ce rapport et retire
-    les points isolés ; la couleur l'applique à chaque canal avec une courbe de contraste.
-  - `pdf/PdfWriter.kt` : écrit le PDF directement — JPEG insérés tels quels pour la couleur, images 1 bit
-    compressées pour le noir et blanc.
+    l'encre garde son contraste, quelle que soit la lumière. Le noir et blanc seuille ce rapport en
+    agrandissant au passage (bords de lettres lisses) et efface les petites taches de bruit ; la couleur
+    l'applique à chaque canal avec une courbe de contraste, puis renforce la netteté.
+  - `imaging/ImageFiles.kt` : PNG 1 bit et lecture des en-têtes JPEG.
+  - `pdf/PdfWriter.kt` : écrit le PDF directement — JPEG et données des PNG 1 bit insérés tels quels.
 - `app/` — l'appli Android : scanner ML Kit, stockage des documents (`data/`), rendu des pages en
   arrière-plan (`render/`), écrans Compose (`ui/`).
 

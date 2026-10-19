@@ -38,22 +38,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
-import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import fr.perso.scan.MainViewModel
 import fr.perso.scan.Screen
 import fr.perso.scan.data.ScanDocument
 import fr.perso.scan.data.ScanPage
+import fr.perso.scan.scanner.DocumentScanner
 import kotlinx.coroutines.launch
 import java.io.File
-
-/** Scanner de Google : détection des bords, recadrage, nettoyage, plusieurs pages, import depuis la galerie. */
-private val scannerOptions = GmsDocumentScannerOptions.Builder()
-    .setGalleryImportAllowed(true)
-    .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
-    .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
-    .build()
 
 @Composable
 fun ScanApp(viewModel: MainViewModel) {
@@ -93,7 +85,7 @@ fun ScanApp(viewModel: MainViewModel) {
     fun scan(target: String?) {
         val activity = context.findActivity() ?: return
         viewModel.scanTarget = target
-        GmsDocumentScanning.getClient(scannerOptions).getStartScanIntent(activity)
+        DocumentScanner.client.getStartScanIntent(activity)
             .addOnSuccessListener { scanLauncher.launch(IntentSenderRequest.Builder(it).build()) }
             .addOnFailureListener {
                 viewModel.scanTarget = null

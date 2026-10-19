@@ -84,6 +84,8 @@ dependencies {
     // Scanner de documents de Google (détection des bords, recadrage, plusieurs pages),
     // fourni par les services Google Play : rien de lourd dans l'APK.
     implementation("com.google.android.gms:play-services-mlkit-document-scanner:16.0.0")
+    // Préchargement du module du scanner au démarrage (ModuleInstall).
+    implementation("com.google.android.gms:play-services-base:18.5.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

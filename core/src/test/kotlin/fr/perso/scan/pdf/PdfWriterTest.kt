@@ -1,5 +1,7 @@
 package fr.perso.scan.pdf
 
+import fr.perso.scan.imaging.Bilevel
+import fr.perso.scan.imaging.BilevelPng
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.rendering.PDFRenderer
 import org.junit.Assert.assertEquals
@@ -33,10 +35,21 @@ class PdfWriterTest {
         )
         writer.addPage(halfBlack(803, 400), PageGeometry.compute(PageFormat.A4, 803, 400))
         writer.addPage(halfBlack(100, 300), PageGeometry.compute(PageFormat.FIT, 100, 300))
+        // PNG 1 bit inséré tel quel : moitié gauche noire.
+        val png = Bilevel(803, 400)
+        for (y in 0 until 400) for (x in 401 until 803) {
+            val i = y * png.rowBytes + x / 8
+            png.data[i] = (png.data[i].toInt() or (0x80 ushr (x % 8))).toByte()
+        }
+        val pngData = BilevelPng.read(ByteArrayOutputStream().also { BilevelPng.write(png, it) }.toByteArray())!!
+        writer.addPage(
+            PdfWriter.Image.PngBilevel(pngData.zlib, pngData.width, pngData.height),
+            PageGeometry.compute(PageFormat.A4, 803, 400),
+        )
         writer.finish()
 
         Loader.loadPDF(out.toByteArray()).use { document ->
-            assertEquals(3, document.numberOfPages)
+            assertEquals(4, document.numberOfPages)
             assertEquals("Facture électricité (octobre)", document.documentInformation.title)
 
             val portrait = document.getPage(0).mediaBox
@@ -54,10 +67,12 @@ class PdfWriterTest {
             val center = colorPage.getRGB(colorPage.width / 2, colorPage.height / 2)
             assertTrue("rouge attendu : ${Integer.toHexString(center)}", close(center, 0xD03030))
 
-            val bwPage = renderer.renderImage(1, 0.5f)
-            val y = bwPage.height / 2
-            assertEquals(0x000000, bwPage.getRGB(bwPage.width / 4, y) and 0xFFFFFF)
-            assertEquals(0xFFFFFF, bwPage.getRGB(bwPage.width * 3 / 4, y) and 0xFFFFFF)
+            for (index in listOf(1, 3)) {
+                val bwPage = renderer.renderImage(index, 0.5f)
+                val y = bwPage.height / 2
+                assertEquals("page $index", 0x000000, bwPage.getRGB(bwPage.width / 4, y) and 0xFFFFFF)
+                assertEquals("page $index", 0xFFFFFF, bwPage.getRGB(bwPage.width * 3 / 4, y) and 0xFFFFFF)
+            }
         }
     }
 
