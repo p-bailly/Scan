@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Version une couleur pour les icônes à thème d'Android 13+ (seule l'opacité compte) :
+     la page coupée par le faisceau, partie scannée pleine, partie à scanner atténuée. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Haut de la page, lignes évidées -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M41,30 H61 L70,39 V49 H38 V33 A3,3 0 0 1 41,30 Z M61,30 V37 A2,2 0 0 0 63,39 H70 Z M44.5,40 H62.5 A1.5,1.5 0 0 1 62.5,43 H44.5 A1.5,1.5 0 0 1 44.5,40 Z M44.5,45 H54.5 A1.5,1.5 0 0 1 54.5,48 H44.5 A1.5,1.5 0 0 1 44.5,45 Z" />
+    <!-- Coin corné -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.5"
+        android:pathData="M61,30 V37 A2,2 0 0 0 63,39 H70 Z" />
+    <!-- Faisceau -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M31.5,51 H76.5 A1.5,1.5 0 0 1 76.5,54 H31.5 A1.5,1.5 0 0 1 31.5,51 Z" />
+    <!-- Bas de la page, pas encore scanné -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.55"
+        android:fillType="evenOdd"
+        android:pathData="M38,56 H70 V73 A3,3 0 0 1 67,76 H41 A3,3 0 0 1 38,73 Z M44.5,60 H62.5 A1.5,1.5 0 0 1 62.5,63 H44.5 A1.5,1.5 0 0 1 44.5,60 Z M44.5,66 H62.5 A1.5,1.5 0 0 1 62.5,69 H44.5 A1.5,1.5 0 0 1 44.5,66 Z" />
+</vector>
