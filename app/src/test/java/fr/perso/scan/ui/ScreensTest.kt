@@ -11,9 +11,11 @@ import androidx.compose.runtime.setValue
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import fr.perso.scan.data.DocumentStore
 import fr.perso.scan.data.ScanDocument
 import fr.perso.scan.data.ScanMode
@@ -84,6 +86,7 @@ class ScreensTest {
         val thumbnail = { page: ScanPage -> store.thumbnail("doc", page) to false }
         var screen by mutableStateOf("home")
         var opened: ScanDocument? = null
+        var shared: List<ScanDocument>? = null
         var mode: ScanMode? = null
 
         compose.setContent {
@@ -94,11 +97,13 @@ class ScreensTest {
                         thumbnail = { thumbnail(it.pages.first()) },
                         snackbar = SnackbarHostState(),
                         actions = DocumentActions({ opened = it }, {}, {}, {}, {}, {}),
+                        onShare = { shared = it },
+                        onDelete = {},
                         onScan = {},
                         onImport = {},
                         onSettings = {},
                     )
-                    "empty" -> HomeScreen(emptyList(), { null }, SnackbarHostState(), noActions, {}, {}, {})
+                    "empty" -> HomeScreen(emptyList(), { null }, SnackbarHostState(), noActions, {}, {}, {}, {}, {})
                     "document" -> DocumentScreen(
                         document = document,
                         thumbnail = thumbnail,
@@ -129,6 +134,18 @@ class ScreensTest {
         capture("1-accueil")
         compose.onNodeWithText("Facture électricité septembre").performClick()
         assertEquals(document, opened)
+
+        // « Tout partager » : tous les documents d'un coup.
+        compose.onNodeWithContentDescription("Tout partager").performClick()
+        assertEquals(listOf(document, other), shared)
+
+        // Appui long : sélection, puis partage de la sélection seule.
+        compose.onNodeWithText("Scan 19-10-2026 14h32").performTouchInput { longClick() }
+        compose.onNodeWithText("1 sélectionné").assertIsDisplayed()
+        capture("1b-selection")
+        compose.onNodeWithContentDescription("Partager la sélection").performClick()
+        assertEquals(listOf(other), shared)
+        compose.onNodeWithContentDescription("Tout partager").assertIsDisplayed()
 
         screen = "empty"
         capture("2-accueil-vide")

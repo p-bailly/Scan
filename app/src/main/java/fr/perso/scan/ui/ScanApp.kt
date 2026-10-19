@@ -68,7 +68,7 @@ fun ScanApp(viewModel: MainViewModel) {
     LaunchedEffect(Unit) { viewModel.messages.collect { snackbar.showSnackbar(it) } }
 
     var renaming by rememberSaveable { mutableStateOf<String?>(null) }
-    var deleting by rememberSaveable { mutableStateOf<String?>(null) }
+    var deleting by rememberSaveable { mutableStateOf<List<String>?>(null) }
     var deletingPage by rememberSaveable { mutableStateOf<String?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var saving by rememberSaveable { mutableStateOf<String?>(null) }
@@ -106,30 +106,40 @@ fun ScanApp(viewModel: MainViewModel) {
         importLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
 
-    fun withPdf(document: ScanDocument, action: (File) -> Unit) {
-        scope.launch { viewModel.buildPdf(document.id)?.let(action) }
+    fun uriOf(file: File) = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+
+    /** Partage les PDF des documents (un ou plusieurs) : Drive, mail, messagerie… */
+    fun share(documents: List<ScanDocument>) {
+        if (documents.isEmpty()) return
+        scope.launch {
+            val files = viewModel.buildPdfs(documents.map { it.id })
+            if (files.isNullOrEmpty()) return@launch
+            val uris = files.map(::uriOf)
+            val send = if (uris.size == 1) {
+                Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris.single())
+            } else {
+                Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+            }
+            send.type = "application/pdf"
+            send.putExtra(Intent.EXTRA_SUBJECT, documents.singleOrNull()?.name ?: "${documents.size} documents scannés")
+            // Droit de lecture accordé à l'appli choisie pour chaque fichier.
+            send.clipData = ClipData.newRawUri(files.first().name, uris.first()).apply {
+                uris.drop(1).forEach { addItem(ClipData.Item(it)) }
+            }
+            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val title = if (uris.size == 1) "Partager le PDF" else "Partager les ${uris.size} PDF"
+            context.startActivity(Intent.createChooser(send, title))
+        }
     }
 
     val actions = DocumentActions(
         open = { viewModel.open(Screen.Document(it.id)) },
-        share = { document ->
-            withPdf(document) { file ->
-                val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
-                val send = Intent(Intent.ACTION_SEND).apply {
-                    type = "application/pdf"
-                    putExtra(Intent.EXTRA_STREAM, uri)
-                    putExtra(Intent.EXTRA_SUBJECT, document.name)
-                    clipData = ClipData.newRawUri(file.name, uri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-                context.startActivity(Intent.createChooser(send, "Partager le PDF"))
-            }
-        },
+        share = { share(listOf(it)) },
         openPdf = { document ->
-            withPdf(document) { file ->
-                val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+            scope.launch {
+                val file = viewModel.buildPdfs(listOf(document.id))?.firstOrNull() ?: return@launch
                 val view = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(uri, "application/pdf")
+                    setDataAndType(uriOf(file), "application/pdf")
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 try {
@@ -144,7 +154,7 @@ fun ScanApp(viewModel: MainViewModel) {
             saveLauncher.launch(viewModel.pdfFileName(document))
         },
         rename = { renaming = it.id },
-        delete = { deleting = it.id },
+        delete = { deleting = listOf(it.id) },
     )
 
     BackHandler(enabled = screen != Screen.Home) { viewModel.back() }
@@ -161,6 +171,8 @@ fun ScanApp(viewModel: MainViewModel) {
                 thumbnail = { document -> document.pages.firstOrNull()?.let { pageFiles(document, full = false)(it) } },
                 snackbar = snackbar,
                 actions = actions,
+                onShare = ::share,
+                onDelete = { selection -> deleting = selection.map { it.id } },
                 onScan = { scan(null) },
                 onImport = { import(null) },
                 onSettings = { showSettings = true },
@@ -218,18 +230,23 @@ fun ScanApp(viewModel: MainViewModel) {
             }
         }
     }
-    deleting?.let { id ->
-        val document = viewModel.document(id)
-        if (document == null) {
+    deleting?.let { ids ->
+        val documents = ids.mapNotNull { viewModel.document(it) }
+        if (documents.isEmpty()) {
             deleting = null
         } else {
+            val single = documents.singleOrNull()
             ConfirmDialog(
-                title = "Supprimer le document ?",
-                text = "« ${document.name} » (${pageCount(document.pages.size)}) sera définitivement supprimé.",
+                title = if (single != null) "Supprimer le document ?" else "Supprimer ${documents.size} documents ?",
+                text = if (single != null) {
+                    "« ${single.name} » (${pageCount(single.pages.size)}) sera définitivement supprimé."
+                } else {
+                    "Les ${documents.size} documents sélectionnés seront définitivement supprimés."
+                },
                 confirm = "Supprimer",
                 onDismiss = { deleting = null },
             ) {
-                viewModel.deleteDocument(id)
+                viewModel.deleteDocuments(documents.map { it.id })
                 deleting = null
             }
         }

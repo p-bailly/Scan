@@ -3,7 +3,9 @@ package fr.perso.scan.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,14 +15,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -42,9 +47,11 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -89,6 +96,8 @@ fun HomeScreen(
     thumbnail: (ScanDocument) -> Pair<File, Boolean>?,
     snackbar: SnackbarHostState,
     actions: DocumentActions,
+    onShare: (List<ScanDocument>) -> Unit,
+    onDelete: (List<ScanDocument>) -> Unit,
     onScan: () -> Unit,
     onImport: () -> Unit,
     onSettings: () -> Unit,
@@ -97,9 +106,43 @@ fun HomeScreen(
     var query by rememberSaveable { mutableStateOf("") }
     val shown = if (searching && query.isNotBlank()) documents.filter { normalize(it.name).contains(normalize(query)) } else documents
 
+    // Sélection (appui long sur un document) : partager ou supprimer plusieurs documents d'un coup.
+    var selectedIds by rememberSaveable { mutableStateOf(listOf<String>()) }
+    val selection = documents.filter { it.id in selectedIds }
+    val selecting = selection.isNotEmpty()
+    fun toggle(document: ScanDocument) {
+        selectedIds = if (document.id in selectedIds) selectedIds - document.id else selectedIds + document.id
+    }
+    BackHandler(enabled = selecting) { selectedIds = emptyList() }
+    BackHandler(enabled = searching && !selecting) {
+        searching = false
+        query = ""
+    }
+
     Scaffold(
         topBar = {
-            if (searching) {
+            if (selecting) {
+                TopAppBar(
+                    navigationIcon = {
+                        IconButton(onClick = { selectedIds = emptyList() }) {
+                            Icon(Icons.Default.Close, contentDescription = "Annuler la sélection")
+                        }
+                    },
+                    title = { Text(if (selection.size == 1) "1 sélectionné" else "${selection.size} sélectionnés") },
+                    actions = {
+                        if (selection.size < shown.size) {
+                            TextButton(onClick = { selectedIds = (selectedIds + shown.map { it.id }).distinct() }) { Text("Tout") }
+                        }
+                        IconButton(onClick = { onShare(selection); selectedIds = emptyList() }) {
+                            Icon(Icons.Default.Share, contentDescription = "Partager la sélection")
+                        }
+                        IconButton(onClick = { onDelete(selection); selectedIds = emptyList() }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Supprimer la sélection")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                )
+            } else if (searching) {
                 val focus = remember { FocusRequester() }
                 TopAppBar(
                     navigationIcon = {
@@ -135,6 +178,8 @@ fun HomeScreen(
                     actions = {
                         if (documents.isNotEmpty()) {
                             IconButton(onClick = { searching = true }) { Icon(Icons.Default.Search, contentDescription = "Rechercher") }
+                            // Tous les PDF d'un coup : Drive, mail, messagerie…
+                            IconButton(onClick = { onShare(documents) }) { Icon(Icons.Default.Share, contentDescription = "Tout partager") }
                         }
                         IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, contentDescription = "Réglages") }
                     },
@@ -165,7 +210,15 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 items(shown, key = { it.id }) { document ->
-                    DocumentRow(document, thumbnail(document), actions, Modifier.animateItem())
+                    DocumentRow(
+                        document = document,
+                        thumbnail = thumbnail(document),
+                        actions = actions,
+                        selecting = selecting,
+                        selected = document.id in selectedIds,
+                        onToggle = { toggle(document) },
+                        modifier = Modifier.animateItem(),
+                    )
                     HorizontalDivider(Modifier.padding(start = 88.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 }
             }
@@ -173,11 +226,15 @@ fun HomeScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DocumentRow(
     document: ScanDocument,
     thumbnail: Pair<File, Boolean>?,
     actions: DocumentActions,
+    selecting: Boolean,
+    selected: Boolean,
+    onToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var menu by remember { mutableStateOf(false) }
@@ -185,22 +242,40 @@ private fun DocumentRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .clickable { actions.open(document) }
+            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+            .combinedClickable(
+                onClick = { if (selecting) onToggle() else actions.open(document) },
+                onLongClick = onToggle,
+                onLongClickLabel = "Sélectionner",
+            )
             .padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
     ) {
-        Surface(
-            shape = RoundedCornerShape(6.dp),
-            color = Color.White,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            modifier = Modifier.size(width = 56.dp, height = 76.dp),
-        ) {
-            if (thumbnail != null) {
-                PageImage(
-                    file = thumbnail.first,
-                    rendering = thumbnail.second,
-                    maxSize = 256,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
+        Box {
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = Color.White,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.size(width = 56.dp, height = 76.dp),
+            ) {
+                if (thumbnail != null) {
+                    PageImage(
+                        file = thumbnail.first,
+                        rendering = thumbnail.second,
+                        maxSize = 256,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+            if (selected) {
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = "Sélectionné",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .offset((-6).dp, (-6).dp)
+                        .background(MaterialTheme.colorScheme.surface, CircleShape),
                 )
             }
         }
@@ -219,9 +294,14 @@ private fun DocumentRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Box {
-            IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Plus d'options") }
-            DocumentMenu(menu, onDismiss = { menu = false }, document, actions)
+        if (selecting) {
+            // Garde la même largeur de ligne qu'avec le bouton « ⋮ ».
+            Spacer(Modifier.size(48.dp))
+        } else {
+            Box {
+                IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Plus d'options") }
+                DocumentMenu(menu, onDismiss = { menu = false }, document, actions)
+            }
         }
     }
 }

@@ -36,6 +36,8 @@ retélécharger : il s'installe par-dessus l'ancien, documents conservés.
 - Ajouter des pages (scanner ou galerie), tourner, réordonner, supprimer une page, zoom à deux doigts.
 - Renommer, supprimer.
 - **PDF** : partager (mail, messagerie, Drive…), ouvrir dans un lecteur PDF, ou enregistrer où l'on veut.
+- **Tout partager** (bouton de partage en haut de l'accueil) : tous les PDF d'un coup vers Drive, Gmail…
+  Appui long sur un document pour en sélectionner plusieurs, puis les partager ou les supprimer ensemble.
 - Réglages : rendu par défaut des nouveaux scans (noir et blanc, couleur ou original) et format des
   pages du PDF (A4 ou taille de l'image).
 - Thème clair / sombre, couleurs Material You (Android 12+).

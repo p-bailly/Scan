@@ -192,6 +192,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         edit(documentId) { it.copy(name = trimmed) }
     }
 
+    fun deleteDocuments(documentIds: Collection<String>) = documentIds.forEach(::deleteDocument)
+
     fun deleteDocument(documentId: String) {
         _documents.update { list -> list.filterNot { it.id == documentId } }
         val screen = _screen.value
@@ -208,20 +210,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- PDF ---
 
-    /** Crée le PDF du document dans le cache (pour le partager) et renvoie le fichier. */
-    suspend fun buildPdf(documentId: String): File? = withBusy("Création du PDF…") {
-        val document = document(documentId) ?: return@withBusy null
-        awaitRendered(document)
+    /**
+     * Crée dans le cache le PDF de chaque document (pour les partager ou les ouvrir) et renvoie les fichiers,
+     * dans le même ordre. Null en cas d'erreur (message affiché).
+     */
+    suspend fun buildPdfs(documentIds: List<String>): List<File>? = withBusy("Création du PDF…") {
+        val documents = documentIds.mapNotNull { document(it) }
+        val dir = File(getApplication<Application>().cacheDir, "pdf")
         withContext(Dispatchers.IO) {
-            val dir = File(getApplication<Application>().cacheDir, "pdf").apply { mkdirs() }
+            dir.mkdirs()
             // Anciens PDF partagés : gardés une journée, l'appli destinataire peut encore les lire.
             val yesterday = System.currentTimeMillis() - 24 * 3600 * 1000L
             dir.listFiles()?.filter { it.lastModified() < yesterday }?.forEach { it.delete() }
-            val file = File(dir, pdfFileName(document))
-            file.outputStream().buffered().use {
-                renderer.writePdf(document.id, document.name, document.pages, _settings.value.pageFormat, it)
+        }
+        val names = mutableSetOf<String>()
+        documents.mapIndexed { index, document ->
+            if (documents.size > 1) _busy.value = "Création des PDF (${index + 1} sur ${documents.size})…"
+            awaitRendered(document)
+            // Deux documents du même nom ne doivent pas s'écraser.
+            val base = pdfFileName(document).removeSuffix(".pdf")
+            var name = "$base.pdf"
+            var n = 2
+            while (!names.add(name)) name = "$base (${n++}).pdf"
+            withContext(Dispatchers.IO) {
+                val file = File(dir, name)
+                file.outputStream().buffered().use {
+                    renderer.writePdf(document.id, document.name, document.pages, _settings.value.pageFormat, it)
+                }
+                file
             }
-            file
         }
     }
 
