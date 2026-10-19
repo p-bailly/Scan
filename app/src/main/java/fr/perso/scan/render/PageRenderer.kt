@@ -32,13 +32,13 @@ class PageRenderer(private val store: DocumentStore) {
         // Original droit et déjà en JPEG : copié tel quel, sans recompression (qualité intacte, instantané).
         if (page.mode == ScanMode.ORIGINAL && page.rotation % 360 == 0 && isEmbeddableJpeg(source)) {
             writeAtomically(target) { out -> source.inputStream().use { it.copyTo(out) }; true }
-            val preview = decode(source, THUMB_WIDTH * 2)
+            val preview = decodeBitmap(source, THUMB_WIDTH * 2)
             writeThumbnail(documentId, page, preview)
             preview.recycle()
             return
         }
 
-        var bitmap = decode(source, MAX_SIDE)
+        var bitmap = decodeBitmap(source, MAX_SIDE)
         if (page.rotation % 360 != 0) {
             val matrix = Matrix().apply { postRotate(page.rotation.toFloat()) }
             val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
@@ -146,30 +146,6 @@ class PageRenderer(private val store: DocumentStore) {
         return orientation == ExifInterface.ORIENTATION_NORMAL || orientation == ExifInterface.ORIENTATION_UNDEFINED
     }
 
-    /** Décode une image (orientation EXIF appliquée), réduite si son grand côté dépasse [side] pixels. */
-    private fun decode(file: File, side: Int): Bitmap {
-        val decoded = ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { decoder, info, _ ->
-            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-            val long = max(info.size.width, info.size.height)
-            // Réduction grossière dès le décodage pour les très grandes photos (mémoire),
-            // en restant au-dessus de la taille visée.
-            if (long >= side * 2) decoder.setTargetSampleSize(long / side)
-        }
-        val bitmap = if (decoded.config == Bitmap.Config.ARGB_8888) decoded
-        else decoded.copy(Bitmap.Config.ARGB_8888, false).also { decoded.recycle() }
-        val long = max(bitmap.width, bitmap.height)
-        if (long <= side) return bitmap
-        val scale = side.toFloat() / long
-        val scaled = Bitmap.createScaledBitmap(
-            bitmap,
-            max(1, (bitmap.width * scale).roundToInt()),
-            max(1, (bitmap.height * scale).roundToInt()),
-            true,
-        )
-        if (scaled !== bitmap) bitmap.recycle()
-        return scaled
-    }
-
     private fun writeAtomically(target: File, write: (OutputStream) -> Boolean) {
         val tmp = File(target.parentFile, target.name + ".tmp")
         val ok = tmp.outputStream().buffered().use(write)
@@ -188,4 +164,28 @@ class PageRenderer(private val store: DocumentStore) {
         const val JPEG_QUALITY = 90
         const val THUMB_WIDTH = 480
     }
+}
+
+/** Décode une image (orientation EXIF appliquée), réduite si son grand côté dépasse [side] pixels. */
+internal fun decodeBitmap(file: File, side: Int): Bitmap {
+    val decoded = ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { decoder, info, _ ->
+        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        val long = max(info.size.width, info.size.height)
+        // Réduction grossière dès le décodage pour les très grandes photos (mémoire),
+        // en restant au-dessus de la taille visée.
+        if (long >= side * 2) decoder.setTargetSampleSize(long / side)
+    }
+    val bitmap = if (decoded.config == Bitmap.Config.ARGB_8888) decoded
+    else decoded.copy(Bitmap.Config.ARGB_8888, false).also { decoded.recycle() }
+    val long = max(bitmap.width, bitmap.height)
+    if (long <= side) return bitmap
+    val scale = side.toFloat() / long
+    val scaled = Bitmap.createScaledBitmap(
+        bitmap,
+        max(1, (bitmap.width * scale).roundToInt()),
+        max(1, (bitmap.height * scale).roundToInt()),
+        true,
+    )
+    if (scaled !== bitmap) bitmap.recycle()
+    return scaled
 }

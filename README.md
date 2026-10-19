@@ -21,6 +21,12 @@ retélécharger : il s'installe par-dessus l'ancien, documents conservés.
 **Scanner**
 - Scanner de documents de Google (ML Kit, via les services Google Play) : détection automatique des bords,
   recadrage et redressement de la perspective, plusieurs pages d'affilée, effacement des doigts et des taches.
+- **Rafale**, pour beaucoup de pages à la suite : l'appareil photo reste ouvert, chaque appui ajoute une page,
+  sans écran de validation entre deux. Le contour de la page est suivi en direct (en bleu) ; chaque photo est
+  recadrée et redressée en arrière-plan (perspective corrigée, proportions réelles retrouvées, A4 reconnue)
+  pendant qu'on prend la suivante. Lampe, compteur de pages, « Terminer » pour tout ajouter au document.
+  Marche le mieux avec la feuille posée sur un fond plus sombre qu'elle ; si ses bords ne sont pas trouvés,
+  la photo est gardée entière.
 - Import de photos depuis la galerie, ou « Partager › Scan » depuis n'importe quelle appli.
 
 **Rendu des pages** (par document ou page par page)
@@ -47,7 +53,8 @@ Le module du scanner Google est préchargé à l'ouverture de l'appli, le premie
 - Thème clair / sombre, couleurs Material You (Android 12+).
 
 Android 9 ou plus récent. Le scanner a besoin des services Google Play (présents sur presque tous les
-téléphones) ; sans eux, l'import depuis la galerie reste disponible.
+téléphones) ; sans eux, la rafale et l'import depuis la galerie restent disponibles. La rafale demande
+l'accès à l'appareil photo à sa première utilisation.
 
 ## Comment ça marche
 
@@ -58,9 +65,14 @@ téléphones) ; sans eux, l'import depuis la galerie reste disponible.
     agrandissant au passage (bords de lettres lisses) et efface les petites taches de bruit ; la couleur
     l'applique à chaque canal avec une courbe de contraste, puis renforce la netteté.
   - `imaging/ImageFiles.kt` : PNG 1 bit et lecture des en-têtes JPEG.
+  - `imaging/PageDetector.kt` : trouve la page dans une photo (rafale). Recherche grossière sur l'image réduite
+    (seuil d'Otsu, zone claire au centre, plus grand quadrilatère inscrit dans son enveloppe convexe), puis
+    affinage : le bord net papier / fond est cherché le long de chaque côté et une droite y est ajustée.
+    Les proportions réelles de la page sont retrouvées d'après la perspective (méthode de Zhang et He).
   - `pdf/PdfWriter.kt` : écrit le PDF directement — JPEG et données des PNG 1 bit insérés tels quels.
-- `app/` — l'appli Android : scanner ML Kit, stockage des documents (`data/`), rendu des pages en
-  arrière-plan (`render/`), écrans Compose (`ui/`).
+- `app/` — l'appli Android : scanner ML Kit, rafale avec CameraX (`ui/BurstScreen.kt`, redressement des pages
+  dans `render/PageCropper.kt`), stockage des documents (`data/`), rendu des pages en arrière-plan (`render/`),
+  écrans Compose (`ui/`).
 
 Les documents restent dans le stockage privé de l'appli (`documents/<id>/`) : l'image d'origine de chaque page
 n'est jamais modifiée, le rendu (mode, rotation) est recalculé à chaque changement.

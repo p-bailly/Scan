@@ -99,6 +99,7 @@ fun HomeScreen(
     onShare: (List<ScanDocument>) -> Unit,
     onDelete: (List<ScanDocument>) -> Unit,
     onScan: () -> Unit,
+    onBurst: () -> Unit,
     onImport: () -> Unit,
     onSettings: () -> Unit,
 ) {
@@ -191,6 +192,14 @@ fun HomeScreen(
                 SmallFloatingActionButton(onClick = onImport) {
                     Icon(painterResource(R.drawable.ic_photo_library), contentDescription = "Importer des photos")
                 }
+                // Plein de pages à la suite : l'appareil photo reste ouvert.
+                ExtendedFloatingActionButton(
+                    onClick = onBurst,
+                    icon = { Icon(painterResource(R.drawable.ic_burst), contentDescription = null) },
+                    text = { Text("Rafale") },
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
                 ExtendedFloatingActionButton(
                     onClick = onScan,
                     icon = { Icon(painterResource(R.drawable.ic_scan), contentDescription = null) },
@@ -206,7 +215,7 @@ fun HomeScreen(
                 Text("Aucun document ne correspond", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             else -> LazyColumn(
-                contentPadding = PaddingValues(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding() + 160.dp),
+                contentPadding = PaddingValues(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding() + 232.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
                 items(shown, key = { it.id }) { document ->
@@ -343,7 +352,8 @@ private fun EmptyState(modifier: Modifier = Modifier) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
-        modifier = modifier.fillMaxSize().padding(32.dp),
+        // En bas, la place des boutons flottants : le texte ne passe pas dessous sur les petits écrans.
+        modifier = modifier.fillMaxSize().padding(start = 32.dp, top = 32.dp, end = 32.dp, bottom = 200.dp),
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -364,7 +374,8 @@ private fun EmptyState(modifier: Modifier = Modifier) {
         Spacer(Modifier.height(8.dp))
         Text(
             "Appuyez sur « Scanner » pour photographier un document : les bords sont détectés " +
-                "automatiquement et la page devient un PDF propre, en noir et blanc ou en couleur.",
+                "automatiquement et la page devient un PDF propre, en noir et blanc ou en couleur. " +
+                "Beaucoup de pages ? « Rafale » les enchaîne sans quitter l'appareil photo.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,

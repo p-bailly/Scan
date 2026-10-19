@@ -1,16 +1,16 @@
 package fr.perso.scan.ui
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -43,8 +43,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.perso.scan.R
@@ -67,6 +69,7 @@ fun DocumentScreen(
     onMode: (ScanMode) -> Unit,
     onOpenPage: (Int) -> Unit,
     onScanMore: () -> Unit,
+    onBurstMore: () -> Unit,
     onImportMore: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
@@ -101,16 +104,9 @@ fun DocumentScreen(
         bottomBar = {
             BottomAppBar(
                 actions = {
-                    TextButton(onClick = onScanMore) {
-                        Icon(painterResource(R.drawable.ic_scan), contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Scanner")
-                    }
-                    TextButton(onClick = onImportMore) {
-                        Icon(painterResource(R.drawable.ic_photo_library), contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Importer")
-                    }
+                    BarAction(R.drawable.ic_scan, "Scanner", onScanMore)
+                    BarAction(R.drawable.ic_burst, "Rafale", onBurstMore)
+                    BarAction(R.drawable.ic_photo_library, "Importer", onImportMore)
                 },
                 floatingActionButton = {
                     ExtendedFloatingActionButton(
@@ -166,6 +162,21 @@ fun DocumentScreen(
                 }
             }
         }
+    }
+}
+
+/** Action de la barre du bas : icône et libellé dessous (trois tiennent à côté du bouton « Partager »). */
+@Composable
+private fun BarAction(@DrawableRes icon: Int, label: String, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        Icon(painterResource(icon), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
     }
 }
 

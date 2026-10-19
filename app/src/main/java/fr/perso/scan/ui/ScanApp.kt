@@ -56,6 +56,7 @@ fun ScanApp(viewModel: MainViewModel) {
     val rendering by viewModel.rendering.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val burst by viewModel.burst.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) { viewModel.messages.collect { snackbar.showSnackbar(it) } }
 
@@ -166,6 +167,7 @@ fun ScanApp(viewModel: MainViewModel) {
                 onShare = ::share,
                 onDelete = { selection -> deleting = selection.map { it.id } },
                 onScan = { scan(null) },
+                onBurst = { viewModel.startBurst(null) },
                 onImport = { import(null) },
                 onSettings = { showSettings = true },
             )
@@ -183,6 +185,7 @@ fun ScanApp(viewModel: MainViewModel) {
                         onMode = { viewModel.setDocumentMode(document.id, it) },
                         onOpenPage = { viewModel.open(Screen.Page(document.id, it)) },
                         onScanMore = { scan(document.id) },
+                        onBurstMore = { viewModel.startBurst(document.id) },
                         onImportMore = { import(document.id) },
                     )
                 }
@@ -206,6 +209,15 @@ fun ScanApp(viewModel: MainViewModel) {
                     )
                 }
             }
+            is Screen.Burst -> BurstScreen(
+                shots = burst,
+                snackbar = snackbar,
+                newPhoto = viewModel::newBurstPhoto,
+                onPhoto = viewModel::addBurstPhoto,
+                onError = viewModel::message,
+                onDone = viewModel::finishBurst,
+                onCancel = viewModel::cancelBurst,
+            )
         }
 
         busy?.let { BusyOverlay(it) }
@@ -284,7 +296,7 @@ private fun BusyOverlay(label: String) {
     }
 }
 
-private tailrec fun Context.findActivity(): Activity? = when (this) {
+internal tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null

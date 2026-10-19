@@ -87,6 +87,12 @@ dependencies {
     // Préchargement du module du scanner au démarrage (ModuleInstall).
     implementation("com.google.android.gms:play-services-base:18.5.0")
 
+    // Appareil photo du mode rafale (aperçu, analyse des images, prise de vue).
+    val cameraX = "1.4.1"
+    implementation("androidx.camera:camera-camera2:$cameraX")
+    implementation("androidx.camera:camera-lifecycle:$cameraX")
+    implementation("androidx.camera:camera-view:$cameraX")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 

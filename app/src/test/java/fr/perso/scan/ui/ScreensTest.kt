@@ -4,6 +4,9 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,6 +19,10 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color as ComposeColor
+import fr.perso.scan.BurstShot
 import fr.perso.scan.data.DocumentStore
 import fr.perso.scan.data.ScanDocument
 import fr.perso.scan.data.ScanMode
@@ -88,6 +95,7 @@ class ScreensTest {
         var opened: ScanDocument? = null
         var shared: List<ScanDocument>? = null
         var mode: ScanMode? = null
+        var burst = false
 
         compose.setContent {
             ScanTheme {
@@ -100,10 +108,11 @@ class ScreensTest {
                         onShare = { shared = it },
                         onDelete = {},
                         onScan = {},
+                        onBurst = { burst = true },
                         onImport = {},
                         onSettings = {},
                     )
-                    "empty" -> HomeScreen(emptyList(), { null }, SnackbarHostState(), noActions, {}, {}, {}, {}, {})
+                    "empty" -> HomeScreen(emptyList(), { null }, SnackbarHostState(), noActions, {}, {}, {}, {}, {}, {})
                     "document" -> DocumentScreen(
                         document = document,
                         thumbnail = thumbnail,
@@ -113,6 +122,7 @@ class ScreensTest {
                         onMode = { mode = it },
                         onOpenPage = {},
                         onScanMore = {},
+                        onBurstMore = { burst = true },
                         onImportMore = {},
                     )
                     "page" -> PageScreen(
@@ -147,6 +157,11 @@ class ScreensTest {
         assertEquals(listOf(other), shared)
         compose.onNodeWithContentDescription("Tout partager").assertIsDisplayed()
 
+        // Texte des boutons flottants étendus : seulement dans l'arbre non fusionné.
+        compose.onNodeWithText("Rafale", useUnmergedTree = true).performClick()
+        assertEquals(true, burst)
+        burst = false
+
         screen = "empty"
         capture("2-accueil-vide")
 
@@ -154,11 +169,50 @@ class ScreensTest {
         capture("3-document")
         compose.onNodeWithText("Couleur").performClick()
         assertEquals(ScanMode.COLOR, mode)
+        compose.onNodeWithText("Rafale").performClick()
+        assertEquals(true, burst)
 
         screen = "page"
         capture("4-page")
 
         screen = "settings"
         compose.onNodeWithText("Format des pages du PDF").assertIsDisplayed()
+    }
+
+    @Test
+    fun `mode rafale - contour de la page, derniere page et compteur`() {
+        val pages = listOf(page("p1", ScanMode.ORIGINAL), page("p2", ScanMode.ORIGINAL))
+        val shots = listOf(
+            BurstShot("p1", store.render("doc", pages[0])),
+            BurstShot("p2", store.render("doc", pages[1])),
+            BurstShot("p3"),
+        )
+        var shutter = 0
+        var done = false
+        compose.setContent {
+            ScanTheme {
+                BurstLayout(
+                    shots = shots,
+                    outline = listOf(Offset(150f, 330f), Offset(640f, 300f), Offset(700f, 1180f), Offset(110f, 1210f)),
+                    torch = false,
+                    flashes = 0,
+                    snackbar = SnackbarHostState(),
+                    // Pas d'appareil photo sous Robolectric : une « table » en bois à la place.
+                    preview = { Box(Modifier.fillMaxSize().background(ComposeColor(0xFF6B5444))) },
+                    onShutter = { shutter++ },
+                    onTorch = {},
+                    onDone = { done = true },
+                    onClose = {},
+                )
+            }
+        }
+        capture("5-rafale")
+        compose.onNodeWithText("Appuyez pour prendre la page 4").assertIsDisplayed()
+        compose.onNodeWithContentDescription("3 pages").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Prendre la photo").performClick()
+        compose.onNodeWithContentDescription("Prendre la photo").performClick()
+        assertEquals(2, shutter)
+        compose.onNodeWithText("Terminer").performClick()
+        assertEquals(true, done)
     }
 }

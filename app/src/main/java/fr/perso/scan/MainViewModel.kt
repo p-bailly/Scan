@@ -11,16 +11,19 @@ import fr.perso.scan.data.ScanMode
 import fr.perso.scan.data.ScanPage
 import fr.perso.scan.data.Settings
 import fr.perso.scan.data.SettingsStore
+import fr.perso.scan.render.PageCropper
 import fr.perso.scan.render.PageRenderer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -34,7 +37,13 @@ sealed interface Screen {
     data object Home : Screen
     data class Document(val id: String) : Screen
     data class Page(val documentId: String, val index: Int) : Screen
+
+    /** Mode rafale : les photos s'ajoutent au document [documentId] (null : nouveau document). */
+    data class Burst(val documentId: String?) : Screen
 }
+
+/** Photo du mode rafale : [page] est la page recadrée (null pendant le calcul), [detected] dit si ses bords ont été trouvés. */
+data class BurstShot(val id: String, val page: File? = null, val detected: Boolean = true)
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val store = DocumentStore(application.filesDir)
@@ -72,7 +81,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Document auquel ajouter les pages du prochain scan (null : nouveau document). */
     var scanTarget: String? = null
 
+    /** Photos du mode rafale en cours, dans l'ordre de prise. */
+    private val _burst = MutableStateFlow<List<BurstShot>>(emptyList())
+    val burst: StateFlow<List<BurstShot>> = _burst
+
+    private val burstDir = File(application.cacheDir, "burst")
+    private val burstJobs = mutableMapOf<String, Job>()
+
+    // Une photo recadrée à la fois : chacune occupe ~100 Mo pendant le calcul, l'appareil photo tourne encore.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val cropDispatcher = Dispatchers.Default.limitedParallelism(1)
+
     init {
+        // Restes d'une rafale interrompue (appli arrêtée).
+        viewModelScope.launch(Dispatchers.IO) { burstDir.deleteRecursively() }
         viewModelScope.launch {
             val loaded = withContext(Dispatchers.IO) { store.loadAll() }
             // Un document a pu être créé pendant le chargement (photos partagées au démarrage).
@@ -103,6 +125,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             Screen.Home -> return false
             is Screen.Document -> Screen.Home
             is Screen.Page -> Screen.Document(current.documentId)
+            is Screen.Burst -> {
+                cancelBurst()
+                return true
+            }
         }
         return true
     }
@@ -118,31 +144,104 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val target = scanTarget
         scanTarget = null
         if (uris.isEmpty()) return
-        viewModelScope.launch {
-            val resolver = getApplication<Application>().contentResolver
-            val existing = target?.let { document(it) }
-            val documentId = existing?.id ?: UUID.randomUUID().toString()
-            val mode = _settings.value.defaultMode
-            val newPages = withContext(Dispatchers.IO) {
-                uris.mapNotNull { uri ->
-                    runCatching { ScanPage(store.importImage(resolver, documentId, uri), mode) }
-                        .onFailure { Log.w(TAG, "Import impossible : $uri", it) }
-                        .getOrNull()
-                }
+        viewModelScope.launch { importImages(uris, target) }
+    }
+
+    /** Copie les images dans le document [target] (ou un nouveau document), puis l'affiche. */
+    private suspend fun importImages(uris: List<Uri>, target: String?) {
+        val resolver = getApplication<Application>().contentResolver
+        val existing = target?.let { document(it) }
+        val documentId = existing?.id ?: UUID.randomUUID().toString()
+        val mode = _settings.value.defaultMode
+        val newPages = withContext(Dispatchers.IO) {
+            uris.mapNotNull { uri ->
+                runCatching { ScanPage(store.importImage(resolver, documentId, uri), mode) }
+                    .onFailure { Log.w(TAG, "Import impossible : $uri", it) }
+                    .getOrNull()
             }
-            if (newPages.isEmpty()) {
-                message("Impossible de lire les images")
-                return@launch
-            }
-            if (newPages.size < uris.size) message("${uris.size - newPages.size} image(s) illisible(s) ignorée(s)")
-            val now = System.currentTimeMillis()
-            // Version à jour du document : il a pu être modifié pendant l'import.
-            val current = existing?.let { document(it.id) }
-            val document = current?.copy(updatedAt = now, pages = current.pages + newPages)
-                ?: ScanDocument(documentId, defaultName(now), now, now, newPages)
-            commit(document)
-            _screen.value = Screen.Document(document.id)
         }
+        if (newPages.isEmpty()) {
+            message("Impossible de lire les images")
+            return
+        }
+        if (newPages.size < uris.size) message("${uris.size - newPages.size} image(s) illisible(s) ignorée(s)")
+        val now = System.currentTimeMillis()
+        // Version à jour du document : il a pu être modifié pendant l'import.
+        val current = existing?.let { document(it.id) }
+        val document = current?.copy(updatedAt = now, pages = current.pages + newPages)
+            ?: ScanDocument(documentId, defaultName(now), now, now, newPages)
+        commit(document)
+        _screen.value = Screen.Document(document.id)
+    }
+
+    // --- Mode rafale ---
+
+    /** Ouvre l'appareil photo du mode rafale ; les pages iront dans [documentId] (null : nouveau document). */
+    fun startBurst(documentId: String?) {
+        discardBurst()
+        _screen.value = Screen.Burst(documentId)
+    }
+
+    /** Fichier où enregistrer la prochaine photo de la rafale. */
+    fun newBurstPhoto(): File = File(burstDir.apply { mkdirs() }, "${UUID.randomUUID()}.jpg")
+
+    /** Photo prise : la page est recadrée en arrière-plan, pendant que les photos suivantes sont prises. */
+    fun addBurstPhoto(photo: File) {
+        // Photo arrivée après la fin de la rafale.
+        if (_screen.value !is Screen.Burst) {
+            photo.delete()
+            return
+        }
+        val id = photo.nameWithoutExtension
+        _burst.update { it + BurstShot(id) }
+        burstJobs[id] = viewModelScope.launch {
+            val page = File(burstDir, "$id.page.jpg")
+            try {
+                val detected = withContext(cropDispatcher) { PageCropper.crop(photo, page) }
+                _burst.update { shots -> shots.map { if (it.id == id) it.copy(page = page, detected = detected) else it } }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Log.e(TAG, "Recadrage de la photo $id", e)
+                _burst.update { shots -> shots.filterNot { it.id == id } }
+                message(if (e is OutOfMemoryError) "Mémoire insuffisante pour une photo" else "Une photo n'a pas pu être traitée")
+            } finally {
+                burstJobs.remove(id)
+                withContext(NonCancellable + Dispatchers.IO) { photo.delete() }
+            }
+        }
+    }
+
+    /** Fin de la rafale : une fois toutes les photos recadrées, les pages rejoignent le document. */
+    fun finishBurst() {
+        val burst = _screen.value as? Screen.Burst ?: return
+        leaveBurst(burst)
+        viewModelScope.launch {
+            if (burstJobs.isNotEmpty()) withBusy("Recadrage des pages…") { burstJobs.values.toList().joinAll() }
+            val pages = _burst.value.mapNotNull { it.page }
+            _burst.value = emptyList()
+            if (pages.isNotEmpty()) importImages(pages.map(Uri::fromFile), burst.documentId)
+            withContext(Dispatchers.IO) { pages.forEach { it.delete() } }
+        }
+    }
+
+    /** Abandon de la rafale : les photos sont supprimées. */
+    fun cancelBurst() {
+        val burst = _screen.value as? Screen.Burst ?: return
+        discardBurst()
+        leaveBurst(burst)
+    }
+
+    /** Retour à l'écran d'où la rafale a été lancée. */
+    private fun leaveBurst(burst: Screen.Burst) {
+        _screen.value = burst.documentId?.takeIf { document(it) != null }?.let { Screen.Document(it) } ?: Screen.Home
+    }
+
+    private fun discardBurst() {
+        burstJobs.values.forEach { it.cancel() }
+        val pages = _burst.value.mapNotNull { it.page }
+        _burst.value = emptyList()
+        if (pages.isNotEmpty()) viewModelScope.launch(Dispatchers.IO) { pages.forEach { it.delete() } }
     }
 
     // --- Modifications ---
