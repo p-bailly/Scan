@@ -1,6 +1,6 @@
 # Construit l'APK signé et le publie dans la release « apk » du dépôt, à chaque envoi sur la
 # branche par défaut (ou à la demande : onglet Actions › APK Android › Run workflow).
-# Lien permanent : https://github.com/p-bailly/Scan-/releases/latest/download/Scan.apk
+# Lien permanent : https://github.com/p-bailly/Scan/releases/latest/download/Scan.apk
 name: APK Android
 
 on:

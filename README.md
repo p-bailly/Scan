@@ -6,7 +6,7 @@ au scanner**. Écrit en Kotlin avec Jetpack Compose (Material 3). Paquet : `fr.p
 
 ## Télécharger l'APK
 
-**https://github.com/p-bailly/Scan-/releases/latest/download/Scan.apk**
+**https://github.com/p-bailly/Scan/releases/latest/download/Scan.apk**
 
 1. Ouvrez le lien sur le téléphone Android et téléchargez le fichier.
 2. Ouvrez-le : Android demande d'autoriser l'installation depuis le navigateur (« sources inconnues ») — acceptez.
