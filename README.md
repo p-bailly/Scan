@@ -37,7 +37,7 @@ retélécharger : il s'installe par-dessus l'ancien, documents conservés.
 - Renommer, supprimer.
 - **PDF** : partager (mail, messagerie, Drive…), ouvrir dans un lecteur PDF, ou enregistrer où l'on veut.
 - Réglages : rendu par défaut des nouveaux scans (noir et blanc, couleur ou original) et format des
-  pages du PDF (A4, Lettre US ou taille de l'image).
+  pages du PDF (A4 ou taille de l'image).
 - Thème clair / sombre, couleurs Material You (Android 12+).
 
 Android 9 ou plus récent. Le scanner a besoin des services Google Play (présents sur presque tous les
