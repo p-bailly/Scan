@@ -1,0 +1,59 @@
+# Construit l'APK signé et le publie dans la release « apk » du dépôt, à chaque envoi sur la
+# branche par défaut (ou à la demande : onglet Actions › APK Android › Run workflow).
+# Lien permanent : https://github.com/p-bailly/Scan-/releases/latest/download/Scan.apk
+name: APK Android
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    # Uniquement sur la branche par défaut du dépôt.
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Historique complet : le numéro de version est le nombre de commits.
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Tests et compilation de l'APK
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :core:test testDebugUnitTest assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk Scan.apk
+
+      - name: Publication dans la release « apk »
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "Scan 1.0.$(git rev-list --count HEAD), construit automatiquement depuis ${GITHUB_SHA::7} (build n°${GITHUB_RUN_NUMBER})."
+            echo
+            echo "Télécharger : https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/Scan.apk"
+            echo
+            echo "Dernières modifications :"
+            git log -5 --format='- %s'
+          } > notes.md
+          if gh release view apk >/dev/null 2>&1; then
+            gh release upload apk Scan.apk --clobber
+            gh release edit apk --title "Scan – APK Android" --notes-file notes.md --latest
+          else
+            gh release create apk Scan.apk --target "$GITHUB_SHA" --latest \
+              --title "Scan – APK Android" --notes-file notes.md
+          fi
