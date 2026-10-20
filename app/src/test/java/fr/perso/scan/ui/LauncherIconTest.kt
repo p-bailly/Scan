@@ -41,7 +41,7 @@ class LauncherIconTest {
         listOf(Color::red, Color::green, Color::blue).all { abs(it(actual) - it(expected)) < 24 }
 
     @Test
-    fun `icone rayon de scan`() {
+    fun `icone au crayon`() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val icon = context.getDrawable(R.mipmap.ic_launcher) as AdaptiveIconDrawable
         val full = draw(icon.background, icon.foreground)
@@ -49,11 +49,11 @@ class LauncherIconTest {
         save(draw(icon.monochrome), "icone-monochrome")
 
         // Repère 108 × 108 dessiné en 432 px : facteur 4.
-        val beam = full.getPixel(54 * 4, (52.5f * 4).toInt())
+        val beam = full.getPixel(54 * 4, (54.5f * 4).toInt())
         val paper = full.getPixel(54 * 4, 36 * 4)
         val corner = full.getPixel(8, 8)
-        assertTrue("faisceau ${Integer.toHexString(beam)}", near(beam, Color.rgb(0x31, 0xE3, 0xC3)))
+        assertTrue("rayon ${Integer.toHexString(beam)}", near(beam, Color.rgb(0x2A, 0x9D, 0x8F)))
         assertTrue("page ${Integer.toHexString(paper)}", near(paper, Color.WHITE))
-        assertTrue("fond ${Integer.toHexString(corner)}", near(corner, Color.rgb(0x1B, 0x2A, 0x5C)))
+        assertTrue("fond ${Integer.toHexString(corner)}", near(corner, Color.rgb(0xF6, 0xF1, 0xE6)))
     }
 }
