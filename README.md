@@ -1,91 +1,27 @@
-# Scan 📄
+# Scan
 
-Scanner de documents Android personnel inspiré de **Genius Scan** : on photographie une feuille,
-les bords sont détectés et la page est redressée, puis le tout devient un **PDF propre, comme passé
-au scanner**. Écrit en Kotlin avec Jetpack Compose (Material 3). Paquet : `fr.perso.scan`.
+Scanner de documents Android personnel, inspiré de Genius Scan : on photographie une feuille, les bords
+sont détectés, la page est redressée, et le tout devient un PDF propre. Kotlin, Jetpack Compose,
+paquet `fr.perso.scan`.
 
-## Télécharger l'APK
+Usage : scanner Google ou **rafale** (une page par appui), import galerie ou « Partager › Scan » ; rendu par
+page en noir et blanc, couleur ou original ; partage ou enregistrement des documents en PDF.
 
+## Installer
+
+APK reconstruit par GitHub Actions à chaque push sur la branche par défaut :
 **https://github.com/p-bailly/Scan/releases/latest/download/Scan.apk**
+Ouvrir le lien sur le téléphone (Android 9+) et autoriser l'installation depuis le navigateur ; une mise à
+jour s'installe par-dessus l'ancienne, documents conservés. Le scanner Google demande les services Google
+Play ; la rafale et l'import galerie marchent sans.
 
-1. Ouvrez le lien sur le téléphone Android et téléchargez le fichier.
-2. Ouvrez-le : Android demande d'autoriser l'installation depuis le navigateur (« sources inconnues ») — acceptez.
-3. L'appli **Scan** apparaît avec les autres applis.
+## Construire
 
-L'APK est reconstruit automatiquement par GitHub Actions (`.github/workflows/android.yml`) à chaque push sur la
-branche par défaut, puis publié dans la release « apk » du dépôt. Pour mettre à jour, il suffit de le
-retélécharger : il s'installe par-dessus l'ancien, documents conservés.
-
-## Fonctionnalités
-
-**Scanner**
-- Scanner de documents de Google (ML Kit, via les services Google Play) : détection automatique des bords,
-  recadrage et redressement de la perspective, plusieurs pages d'affilée, effacement des doigts et des taches.
-- **Rafale**, pour beaucoup de pages à la suite : l'appareil photo reste ouvert, chaque appui ajoute une page,
-  sans écran de validation entre deux. Le contour de la page est suivi en direct (en bleu) ; chaque photo est
-  recadrée et redressée en arrière-plan (perspective corrigée, proportions réelles retrouvées, A4 reconnue)
-  pendant qu'on prend la suivante. Lampe, compteur de pages, « Terminer » pour tout ajouter au document.
-  Marche le mieux avec la feuille posée sur un fond plus sombre qu'elle ; si ses bords ne sont pas trouvés,
-  la photo est gardée entière.
-- Import de photos depuis la galerie, ou « Partager › Scan » depuis n'importe quelle appli.
-
-**Rendu des pages** (par document ou page par page)
-- **Noir & blanc** : papier blanc pur, texte noir net, ombres et éclairage inégal effacés. Le stylo bleu,
-  le crayon et les tampons restent lisibles. Calculé en haute définition (≈ 280 dpi sur une A4) puis
-  enregistré en 1 bit dans le PDF : très net et très léger (quelques dizaines de Ko par page).
-- **Couleur** : les couleurs sont gardées, le papier est blanchi (fini le jaune ou le gris des photos),
-  ombres effacées, encres ravivées.
-- **Original** : la photo recadrée, sans retouche ni recompression.
-
-Le traitement est réparti sur tous les cœurs du téléphone, le noir et blanc est calculé directement en
-1 bit, et le PDF est assemblé sans rien décoder ni recompresser : quelques fractions de seconde par page.
-Le module du scanner Google est préchargé à l'ouverture de l'appli, le premier scan démarre sans attendre.
-
-**Documents**
-- Liste des documents avec miniature, date et nombre de pages, recherche (sans tenir compte des accents).
-- Ajouter des pages (scanner ou galerie), tourner, réordonner, supprimer une page, zoom à deux doigts.
-- Renommer, supprimer.
-- **PDF** : partager (mail, messagerie, Drive…), ouvrir dans un lecteur PDF, ou enregistrer où l'on veut.
-- **Tout partager** (bouton de partage en haut de l'accueil) : tous les PDF d'un coup vers Drive, Gmail…
-  Appui long sur un document pour en sélectionner plusieurs, puis les partager ou les supprimer ensemble.
-- Réglages : rendu par défaut des nouveaux scans (noir et blanc, couleur ou original) et format des
-  pages du PDF (A4 ou taille de l'image).
-- Thème clair / sombre, couleurs Material You (Android 12+).
-
-Android 9 ou plus récent. Le scanner a besoin des services Google Play (présents sur presque tous les
-téléphones) ; sans eux, la rafale et l'import depuis la galerie restent disponibles. La rafale demande
-l'accès à l'appareil photo à sa première utilisation.
-
-## Comment ça marche
-
-- `core/` — sans Android, testé sur la JVM :
-  - `imaging/Enhancer.kt` : estime la couleur du papier en tout point (moyenne par blocs, maximum local pour
-    effacer l'encre, flou), puis divise chaque pixel par cette valeur. Le papier devient blanc partout et
-    l'encre garde son contraste, quelle que soit la lumière. Le noir et blanc seuille ce rapport en
-    agrandissant au passage (bords de lettres lisses) et efface les petites taches de bruit ; la couleur
-    l'applique à chaque canal avec une courbe de contraste, puis renforce la netteté.
-  - `imaging/ImageFiles.kt` : PNG 1 bit et lecture des en-têtes JPEG.
-  - `imaging/PageDetector.kt` : trouve la page dans une photo (rafale). Recherche grossière sur l'image réduite
-    (seuil d'Otsu, zone claire au centre, plus grand quadrilatère inscrit dans son enveloppe convexe), puis
-    affinage : le bord net papier / fond est cherché le long de chaque côté et une droite y est ajustée.
-    Les proportions réelles de la page sont retrouvées d'après la perspective (méthode de Zhang et He).
-  - `pdf/PdfWriter.kt` : écrit le PDF directement — JPEG et données des PNG 1 bit insérés tels quels.
-- `app/` — l'appli Android : scanner ML Kit, rafale avec CameraX (`ui/BurstScreen.kt`, redressement des pages
-  dans `render/PageCropper.kt`), stockage des documents (`data/`), rendu des pages en arrière-plan (`render/`),
-  écrans Compose (`ui/`).
-
-Les documents restent dans le stockage privé de l'appli (`documents/<id>/`) : l'image d'origine de chaque page
-n'est jamais modifiée, le rendu (mode, rotation) est recalculé à chaque changement.
-
-## Construire l'APK soi-même
-
-Android SDK (plateforme 35) + Java 17 ou plus récent :
+Android SDK 35 + Java 17 ou plus récent :
 
 ```bash
 ./gradlew :core:test testDebugUnitTest   # tests
 ./gradlew assembleRelease                # → app/build/outputs/apk/release/app-release.apk
 ```
 
-L'APK est signé avec une clé personnelle volontairement versionnée (`app/scan.keystore`), comme pour l'appli
-NBA, pour que les APK construits n'importe où aient la même signature et s'installent les uns par-dessus les
-autres. C'est adapté à un usage perso, pas à une publication sur le Play Store.
+Architecture, signature et pièges : voir [CLAUDE.md](CLAUDE.md).
