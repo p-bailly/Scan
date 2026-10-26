@@ -43,7 +43,7 @@
   `res/drawable/ic_launcher_{foreground,monochrome}.xml` (ne pas les éditer à la main). Style « crayon » commun à
   Basket Live, Scan, Météo, Nimbus et Mes applis (repris de p-bailly/Meteo) ; tremblé aléatoire mais reproductible.
 
-## Comportement produit (retiré du README)
+## Comportement produit
 - Rafale : contour de la page suivi en direct (bleu), compteur, lampe, « Terminer » ajoute tout au document ;
   marche mieux sur fond plus sombre que la feuille. Sans services Google Play : rafale et galerie seulement.
 - Accueil : recherche insensible aux accents, appui long = sélection multiple (partager/supprimer), bouton
